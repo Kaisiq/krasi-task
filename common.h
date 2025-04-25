@@ -9,9 +9,9 @@
 #include <signal.h>
 
 // --- IPC Definitions ---
-#define FIFO_PATH_P2 "/tmp/p5_fifo_p2"  // <<<--- ПРОМЯНА: Преименуван за яснота (Process 2 -> Process 5)
-#define FIFO_PATH_P3 "/tmp/p5_fifo_p3"  // <<<--- НОВО: FIFO за Process 3 (Process 3 -> Process 5)
-#define SOCKET_PATH "/tmp/p5_socket"    // Process 4 -> Process 5 (Unix Domain Socket)
+#define FIFO_PATH_P2 "./p5_fifo_p2"  // <<<--- ПРОМЯНА: Преименуван за яснота (Process 2 -> Process 5)
+#define FIFO_PATH_P3 "./p5_fifo_p3"  // <<<--- НОВО: FIFO за Process 3 (Process 3 -> Process 5)
+#define SOCKET_PATH "./p5_socket"    // Process 4 -> Process 5 (Unix Domain Socket)
 
 // --- FIFO Structures ---
 typedef struct {

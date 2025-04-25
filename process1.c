@@ -2,36 +2,31 @@
 #include <sys/wait.h>
 #include <stdlib.h> // For atoi
 #include <errno.h>  // For errno
+#include <signal.h>
 
 pid_t pids[6] = {0}; // pids[0] unused, pids[1] unused, pids[2-4] for P2-P4, pids[5] for P5
 int running_status[6] = {0}; // 0=stopped, 1=running
 
 char p5_log_filename[256] = "process5_log.txt"; // Default log file
 
-// Function to start Process 5 if not already running
 void ensure_p5_started() {
     if (pids[5] == 0) {
         printf("Starting Process 5 (Logging Process)...\n");
-        // Optional: Prompt for filename
-        // ... (code for filename input) ...
 
         pids[5] = fork();
         if (pids[5] < 0) {
             perror("Failed to fork Process 5");
             pids[5] = 0; // Reset PID
         } else if (pids[5] == 0) {
-            // Child process (P5)
             char *args[] = {"./process5", p5_log_filename, NULL};
             execvp("./process5", args);
             perror("Failed to exec Process 5"); // exec only returns on error
             exit(EXIT_FAILURE);
         } else {
-            // Parent process (P1)
             printf("Process 5 started with PID: %d\n", pids[5]);
             running_status[5] = 1;
-            // Give P5 more time to initialize IPC resources
             printf("Waiting for Process 5 to initialize...\n");
-            sleep(2); // Give P5 2 seconds to setup IPC
+            sleep(2);
         }
     }
 }

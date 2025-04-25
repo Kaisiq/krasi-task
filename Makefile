@@ -1,7 +1,7 @@
 # Makefile for the Multi-Process IPC Example
 
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c11 -g  # -g for debugging symbols
+CFLAGS = -g
 LDFLAGS = -lrt # Link Realtime Extensions library for message queues (-lm might be needed if using math functions)
 
 # Executables
