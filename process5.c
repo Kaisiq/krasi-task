@@ -124,7 +124,7 @@ int openP4File() {
 }
 
 void errorOnStart() {
-  printf(stderr, "[Process 5] CRITICAL: Failed to initialize one or more IPC "
+  printf("[Process 5] CRITICAL: Failed to initialize one or more IPC "
                   "mechanisms. Terminating.\n");
   fflush(stderr);
   cleanup_ipc();
