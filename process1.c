@@ -31,7 +31,6 @@ void ensure_p5_started() {
     }
 }
 
-// Function to stop Process 5 if no other children (P2, P3, P4) are running
 void try_stop_p5() {
     if (pids[5] != 0 && running_status[2] == 0 && running_status[3] == 0 && running_status[4] == 0) {
         printf("Stopping Process 5 (PID: %d)...\n", pids[5]);
@@ -52,7 +51,6 @@ void try_stop_p5() {
     }
 }
 
-// Function to start P2, P3 or P4
 void start_child(int process_num) {
     if (process_num < 2 || process_num > 4) return;
     if (pids[process_num] != 0) {
@@ -68,14 +66,13 @@ void start_child(int process_num) {
      if (scanf("%d", &bg_color) != 1) { printf("Invalid input.\n"); while(getchar()!='\n'); return; }
     printf("Enter pause duration between cycles (milliseconds): ");
      if (scanf("%d", &delay_ms) != 1) { printf("Invalid input.\n"); while(getchar()!='\n'); return; }
-    while (getchar() != '\n'); // Consume trailing newline
+    while (getchar() != '\n');
 
-    ensure_p5_started(); // Make sure P5 is running before starting children
+    ensure_p5_started();
 
-    // Check if P5 is actually running (basic check, P5 might still fail later)
-    if (pids[5] == 0 || kill(pids[5], 0) != 0) { // kill with signal 0 checks existence
+    if (pids[5] == 0 || kill(pids[5], 0) != 0) {
          printf("Cannot start Process %d because Process 5 is not running or failed to start properly.\n", process_num);
-         if (pids[5] != 0 && errno == ESRCH) { // If PID exists but process doesn't, reset status
+         if (pids[5] != 0 && errno == ESRCH) {
              running_status[5] = 0;
              pids[5] = 0;
          }
@@ -89,7 +86,6 @@ void start_child(int process_num) {
         perror("Failed to fork child process");
         pids[process_num] = 0;
     } else if (pids[process_num] == 0) {
-        // Child process (P2, P3, or P4)
         char fg_str[5], bg_str[5], delay_str[10];
         snprintf(fg_str, sizeof(fg_str), "%d", fg_color);
         snprintf(bg_str, sizeof(bg_str), "%d", bg_color);
@@ -100,16 +96,14 @@ void start_child(int process_num) {
 
         char *args[] = {executable_name, fg_str, bg_str, delay_str, NULL};
         execvp(executable_name, args);
-        perror("Failed to exec child process"); // exec only returns on error
+        perror("Failed to exec child process");
         exit(EXIT_FAILURE);
     } else {
-        // Parent process (P1)
         printf("Process %d started with PID: %d\n", process_num, pids[process_num]);
         running_status[process_num] = 1;
     }
 }
 
-// Function to stop P2, P3 or P4
 void stop_child(int process_num) {
     if (process_num < 2 || process_num > 4) return;
     if (pids[process_num] == 0) {
@@ -120,40 +114,38 @@ void stop_child(int process_num) {
     printf("Stopping Process %d (PID: %d)...\n", process_num, pids[process_num]);
     if (kill(pids[process_num], SIGTERM) == 0) {
         int status;
-        waitpid(pids[process_num], &status, 0); // Wait for the child to terminate
+        waitpid(pids[process_num], &status, 0);
         printf("Process %d terminated.\n", process_num);
     } else {
         if (errno == ESRCH) {
              printf("Process %d already terminated.\n", process_num);
         } else {
             perror("Failed to send SIGTERM to child process");
-            // Consider force kill (SIGKILL) if SIGTERM fails
              printf("Attempting force kill (SIGKILL)...\n");
              kill(pids[process_num], SIGKILL);
-             waitpid(pids[process_num], NULL, 0); // Wait after SIGKILL too
+             waitpid(pids[process_num], NULL, 0);
         }
     }
 
     pids[process_num] = 0;
     running_status[process_num] = 0;
 
-    try_stop_p5(); // Check if P5 can be stopped now
+    try_stop_p5();
 }
 
 void display_menu() {
     printf("\n--- Main Menu ---\n");
     printf("1. Start Process 2 (Integers -> FIFO)\t\t[%s]\n", running_status[2] ? "Running" : "Stopped");
-    printf("2. Start Process 3 (Floats -> FIFO)\t\t[%s]\n", running_status[3] ? "Running" : "Stopped"); // <<<--- ПРОМЯНА ТУК
+    printf("2. Start Process 3 (Floats -> FIFO)\t\t[%s]\n", running_status[3] ? "Running" : "Stopped");
     printf("3. Start Process 4 (Strings -> Socket)\t\t[%s]\n", running_status[4] ? "Running" : "Stopped");
     printf("--------------------\n");
     printf("4. Stop Process 2\n");
-    printf("5. Stop Process 3\n"); // <<<--- Текстът тук е ОК, само логиката се променя
+    printf("5. Stop Process 3\n");
     printf("6. Stop Process 4\n");
     printf("--------------------\n");
     printf("7. Exit Program\n");
-    // Check P5 status more reliably before printing
     if (pids[5] != 0 && kill(pids[5], 0) == -1 && errno == ESRCH) {
-        running_status[5] = 0; // Mark as stopped if process died unexpectedly
+        running_status[5] = 0;
         pids[5] = 0;
     }
     printf("Process 5 (Logger) Status:\t\t\t[%s]\n", running_status[5] ? "Running" : "Stopped");
@@ -167,18 +159,18 @@ int main() {
         display_menu();
         if (scanf("%d", &choice) != 1) {
              printf("Invalid input. Please enter a number.\n");
-             while (getchar() != '\n'); // Clear invalid input
-             choice = 0; // Force loop continuation
+             while (getchar() != '\n');
+             choice = 0;
              continue;
         }
-         while (getchar() != '\n'); // Consume trailing newline
+         while (getchar() != '\n');
 
         switch (choice) {
             case 1: start_child(2); break;
-            case 2: start_child(3); break; // <<<--- Действието е същото
+            case 2: start_child(3); break;
             case 3: start_child(4); break;
             case 4: stop_child(2); break;
-            case 5: stop_child(3); break; // <<<--- Действието е същото
+            case 5: stop_child(3); break;
             case 6: stop_child(4); break;
             case 7:
                 if (running_status[2] != 0 || running_status[3] != 0 || running_status[4] != 0) {
@@ -195,7 +187,7 @@ int main() {
                          // choice remains 7, loop condition will be met
                      } else {
                           printf("Error: Failed to stop Process 5. Cannot exit cleanly.\n");
-                          choice = 0; // Prevent exit if P5 cleanup failed
+                          choice = 0;
                      }
                 }
                 break;
@@ -203,7 +195,6 @@ int main() {
                 printf("Invalid choice. Please try again.\n");
         }
 
-    // Loop condition: continue if choice is not 7 OR any child/P5 is still marked as running
     } while (choice != 7 || running_status[2] != 0 || running_status[3] != 0 || running_status[4] != 0 || running_status[5] != 0 );
 
     printf("Main program finished.\n");
