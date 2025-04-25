@@ -46,8 +46,6 @@ int main(int argc, char *argv[]) {
     fflush(stdout);
 
     while (!terminate_flag) {
-        waitForNewline();
-
         printf("%s%sP2 Input> %s", fg_code, bg_code, COLOR_RESET);
         fflush(stdout);
 
@@ -72,7 +70,8 @@ int main(int argc, char *argv[]) {
                  fflush(stdout);
             }
             if (!terminate_flag && delay_ms > 0) {
-                usleep(delay_ms * 1000); // Pause
+                usleep(delay_ms * 1000);
+                waitForNewline();
             }
         } else {
             // scanf failed (e.g., EOF or invalid input)
