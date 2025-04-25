@@ -1,3 +1,4 @@
+#include <string.h>
 #define _POSIX_C_SOURCE 200809L // Или може да опитате с 199309L
 #include "common.h"
 #include <errno.h>
@@ -30,8 +31,6 @@ void cleanup_ipc() {
   printf("[Process 5] Cleaning up IPC resources...\n");
   fflush(stdout);
   if (log_file) {
-    fprintf(log_file, "[%ld] Cleaning up IPC resources...\n", time(NULL));
-    fflush(log_file);
     fclose(log_file);
     log_file = NULL;
   }
@@ -42,7 +41,7 @@ void cleanup_ipc() {
   if (fifo_p3_fd >= 0) {
     close(fifo_p3_fd);
     fifo_p3_fd = -1;
-  } // <<<--- НОВО: Затваряне на втория FIFO
+  }
   // if (mq != (mqd_t)-1) { mq_close(mq); mq = (mqd_t)-1; } // <<<--- ПРЕМАХНАТО
   if (client_sock_fd >= 0) {
     close(client_sock_fd);
@@ -53,8 +52,6 @@ void cleanup_ipc() {
     listen_sock_fd = -1;
   }
 
-  printf("[Process 5] Unlinking IPC paths...\n");
-  fflush(stdout);
   if (unlink(FIFO_PATH_P2) < 0 && errno != ENOENT)
     perror(
         "  unlink fifo_p2 failed"); // <<<--- ПРОМЯНА: Използване на новото име
@@ -73,19 +70,14 @@ int openP2File() {
       errno != EEXIST) { // <<<--- ПРОМЯНА: Права и име
     perror("  ERROR: Failed to create FIFO P2");
     return 0;
-  } else {
+  }
     fifo_p2_fd =
         open(FIFO_PATH_P2,
-             O_RDONLY | O_NONBLOCK); // <<<--- ПРОМЯНА: Име на променлива и път
+                O_RDONLY | O_NONBLOCK); // <<<--- ПРОМЯНА: Име на променлива и път
     if (fifo_p2_fd < 0) {
-      perror("  ERROR: Failed to open FIFO P2 for reading");
-      return 0;
-    } else {
-      fprintf(log_file, "[%ld] FIFO P2 ready at %s (FD: %d)\n", time(NULL),
-              FIFO_PATH_P2, fifo_p2_fd);
-      fflush(log_file);
+        perror("  ERROR: Failed to open FIFO P2 for reading");
+        return 0;
     }
-  }
   return 1;
 }
 
@@ -93,17 +85,12 @@ int openP3File() {
   if (mkfifo(FIFO_PATH_P3, FIFO_PERMS) < 0 && errno != EEXIST) {
     perror("  ERROR: Failed to create FIFO P3");
     return 0;
-  } else {
+  }
     fifo_p3_fd = open(FIFO_PATH_P3, O_RDONLY | O_NONBLOCK);
     if (fifo_p3_fd < 0) {
       perror("  ERROR: Failed to open FIFO P3 for reading");
       return 0;
-    } else {
-      fprintf(log_file, "[%ld] FIFO P3 ready at %s (FD: %d)\n", time(NULL),
-              FIFO_PATH_P3, fifo_p3_fd);
-      fflush(log_file);
     }
-  }
   return 1;
 }
 
@@ -124,47 +111,31 @@ int openP4File() {
       close(listen_sock_fd);
       listen_sock_fd = -1;
       return 0;
-    } else {
-      if (listen(listen_sock_fd, 1) < 0) {
+    }
+    if (listen(listen_sock_fd, 1) < 0) {
         perror("  ERROR: Failed to listen on socket");
         close(listen_sock_fd);
         listen_sock_fd = -1;
         return 0;
-      } else {
-        fcntl(listen_sock_fd, F_SETFL, O_NONBLOCK);
-        fprintf(log_file, "[%ld] Socket listening at %s (FD: %d)\n", time(NULL),
-                SOCKET_PATH, listen_sock_fd);
-        fflush(log_file);
-      }
     }
+    fcntl(listen_sock_fd, F_SETFL, O_NONBLOCK);
   }
   return 1;
 }
 
 void errorOnStart() {
-  fprintf(stderr, "[Process 5] CRITICAL: Failed to initialize one or more IPC "
+  printf(stderr, "[Process 5] CRITICAL: Failed to initialize one or more IPC "
                   "mechanisms. Terminating.\n");
   fflush(stderr);
-  if (log_file) {
-    fprintf(log_file,
-            "[%ld] CRITICAL: Failed to initialize one or more IPC mechanisms. "
-            "Terminating.\n",
-            time(NULL));
-    fflush(log_file);
-  }
   cleanup_ipc();
 }
 
 int main(int argc, char *argv[]) {
   if (argc != 2) {
-    fprintf(stderr, "Usage: %s <log_filename>\n", argv[0]);
+    printf("Usage: %s <log_filename>\n", argv[0]);
     return EXIT_FAILURE;
   }
   const char *log_filename = argv[1];
-
-  printf("[Process 5 - PID: %d] Starting. Logging to file: %s\n", getpid(),
-         log_filename);
-  fflush(stdout);
 
   struct sigaction sa;
   memset(&sa, 0, sizeof(sa));
@@ -178,9 +149,6 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
   setvbuf(log_file, NULL, _IOLBF, BUFSIZ);
-  fprintf(log_file, "\n[%ld] Process 5 Logger Started (PID: %d)\n", time(NULL),
-          getpid());
-  fflush(log_file);
 
   if (!openP2File() || !openP3File() || !openP4File()) {
     errorOnStart();
@@ -215,12 +183,6 @@ int main(int argc, char *argv[]) {
   for (int i = nfds; i < 4; ++i) {
     fds[i].fd = -1;
   }
-  // --- Край на промяната ---
-
-  fprintf(log_file,
-          "[%ld] Entering main event loop with %d initial descriptors.\n",
-          time(NULL), nfds);
-  fflush(log_file);
 
   while (!terminate_flag) {
     int current_nfds = 0;
@@ -231,11 +193,6 @@ int main(int argc, char *argv[]) {
     if (current_nfds == 0 && !terminate_flag) {
       printf("[Process 5] No active IPC descriptors left. Exiting loop.\n");
       fflush(stdout);
-      if (log_file)
-        fprintf(log_file,
-                "[%ld] No active IPC descriptors left. Exiting loop.\n",
-                time(NULL));
-      fflush(log_file);
       break;
     }
 
@@ -245,10 +202,6 @@ int main(int argc, char *argv[]) {
       if (errno == EINTR)
         continue;
       perror("Process 5: poll() failed");
-      if (log_file)
-        fprintf(log_file, "[%ld] CRITICAL: poll() failed: %s\n", time(NULL),
-                strerror(errno));
-      fflush(log_file);
       break;
     }
     if (poll_ret == 0)
@@ -274,12 +227,6 @@ int main(int argc, char *argv[]) {
                    "%d)\n",
                    client_sock_fd);
             fflush(stdout);
-            if (log_file)
-              fprintf(
-                  log_file,
-                  "[%ld] Accepted connection from Process 4 (Socket FD: %d)\n",
-                  time(NULL), client_sock_fd);
-            fflush(log_file);
             fcntl(client_sock_fd, F_SETFL, O_NONBLOCK);
             client_fds_index = -1; // Reset index
             for (int j = 0; j < 4; ++j) {
@@ -291,25 +238,12 @@ int main(int argc, char *argv[]) {
               }
             }
             if (client_fds_index == -1) {
-              fprintf(stderr,
-                      "[Process 5] Error: No space left for client socket!\n");
-              fflush(stderr);
-              if (log_file)
-                fprintf(log_file,
-                        "[%ld] Error: No space left for client socket!\n",
-                        time(NULL));
-              fflush(log_file);
               close(client_sock_fd);
               client_sock_fd = -1;
             }
-            // Optional: Stop listening
             // close(listen_sock_fd); fds[i].fd = -1; listen_sock_fd = -1;
           } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
             perror("Process 5: Failed to accept connection");
-            if (log_file)
-              fprintf(log_file, "[%ld] Error accepting socket connection: %s\n",
-                      time(NULL), strerror(errno));
-            fflush(log_file);
           }
         } else {
           int temp_fd = accept(listen_sock_fd, NULL, NULL);
@@ -333,31 +267,11 @@ int main(int argc, char *argv[]) {
         } else if (bytes_read == 0) { // EOF
           printf("[Process 5] Process 2 (FIFO P2) closed connection.\n");
           fflush(stdout);
-          if (log_file)
-            fprintf(log_file,
-                    "[%ld] Process 2 (FIFO P2) closed connection (EOF).\n",
-                    time(NULL));
-          fflush(log_file);
           close(fifo_p2_fd);
           fds[i].fd = -1;
           fifo_p2_fd = -1;
-        } else if (bytes_read > 0) { // Partial read
-          fprintf(
-              stderr,
-              "[Process 5] Warning: Partial read from FIFO P2 (%zd bytes)\n",
-              bytes_read);
-          fflush(stderr);
-          if (log_file)
-            fprintf(log_file,
-                    "[%ld] Warning: Partial read from FIFO P2 (%zd bytes)\n",
-                    time(NULL), bytes_read);
-          fflush(log_file);
         } else if (errno != EAGAIN && errno != EWOULDBLOCK) { // Error
           perror("Process 5: Error reading from FIFO P2");
-          if (log_file)
-            fprintf(log_file, "[%ld] Error reading from FIFO P2: %s\n",
-                    time(NULL), strerror(errno));
-          fflush(log_file);
           close(fifo_p2_fd);
           fds[i].fd = -1;
           fifo_p2_fd = -1;
@@ -372,44 +286,19 @@ int main(int argc, char *argv[]) {
           printf("[Process 5] Received from P3 (FIFO, PID %d): %f\n",
                  fifo_msg.source_pid, fifo_msg.value);
           fflush(stdout);
-          if (log_file)
-            fprintf(log_file, "[%ld] P3(%d): %f\n", time(NULL),
-                    fifo_msg.source_pid, fifo_msg.value);
-          fflush(log_file);
         } else if (bytes_read == 0) { // EOF
           printf("[Process 5] Process 3 (FIFO P3) closed connection.\n");
           fflush(stdout);
-          if (log_file)
-            fprintf(log_file,
-                    "[%ld] Process 3 (FIFO P3) closed connection (EOF).\n",
-                    time(NULL));
-          fflush(log_file);
           close(fifo_p3_fd);
           fds[i].fd = -1;
           fifo_p3_fd = -1;
-        } else if (bytes_read > 0) { // Partial read
-          fprintf(
-              stderr,
-              "[Process 5] Warning: Partial read from FIFO P3 (%zd bytes)\n",
-              bytes_read);
-          fflush(stderr);
-          if (log_file)
-            fprintf(log_file,
-                    "[%ld] Warning: Partial read from FIFO P3 (%zd bytes)\n",
-                    time(NULL), bytes_read);
-          fflush(log_file);
         } else if (errno != EAGAIN && errno != EWOULDBLOCK) { // Error
           perror("Process 5: Error reading from FIFO P3");
-          if (log_file)
-            fprintf(log_file, "[%ld] Error reading from FIFO P3: %s\n",
-                    time(NULL), strerror(errno));
-          fflush(log_file);
           close(fifo_p3_fd);
           fds[i].fd = -1;
           fifo_p3_fd = -1;
         }
       }
-      // --- Край на новата логика ---
 
       // Check Message Queue <<<--- ПРЕМАХНАТО ---
       // else if (fds[i].fd == mq && ...) { ... }
@@ -422,12 +311,6 @@ int main(int argc, char *argv[]) {
                  "%d).\n",
                  client_sock_fd);
           fflush(stdout);
-          if (log_file)
-            fprintf(
-                log_file,
-                "[%ld] Error/Hangup on Process 4 socket connection (FD %d).\n",
-                time(NULL), client_sock_fd);
-          fflush(log_file);
           close(client_sock_fd);
           fds[i].fd = -1;
           client_sock_fd = -1;
@@ -440,41 +323,16 @@ int main(int argc, char *argv[]) {
             printf("[Process 5] Received from P4 (Socket, PID %d): \"%s\"\n",
                    sock_msg.source_pid, sock_msg.value);
             fflush(stdout);
-            if (log_file)
-              fprintf(log_file, "[%ld] P4(%d): %s\n", time(NULL),
-                      sock_msg.source_pid, sock_msg.value);
-            fflush(log_file);
           } else if (bytes_received == 0) { // Connection closed gracefully
             printf("[Process 5] Process 4 (Socket FD %d) closed connection.\n",
                    client_sock_fd);
             fflush(stdout);
-            if (log_file)
-              fprintf(log_file,
-                      "[%ld] Process 4 (Socket FD %d) closed connection.\n",
-                      time(NULL), client_sock_fd);
-            fflush(log_file);
             close(client_sock_fd);
             fds[i].fd = -1;
             client_sock_fd = -1;
             client_fds_index = -1;
-          } else if (bytes_received > 0) { // Partial read
-            fprintf(stderr,
-                    "[Process 5] Warning: Partial receive from Socket (%zd "
-                    "bytes)\n",
-                    bytes_received);
-            fflush(stderr);
-            if (log_file)
-              fprintf(
-                  log_file,
-                  "[%ld] Warning: Partial receive from Socket (%zd bytes)\n",
-                  time(NULL), bytes_received);
-            fflush(log_file);
           } else if (errno != EAGAIN && errno != EWOULDBLOCK) { // Error on recv
             perror("Process 5: recv failed");
-            if (log_file)
-              fprintf(log_file, "[%ld] Error receiving from Socket: %s\n",
-                      time(NULL), strerror(errno));
-            fflush(log_file);
             close(client_sock_fd);
             fds[i].fd = -1;
             client_sock_fd = -1;
@@ -482,16 +340,11 @@ int main(int argc, char *argv[]) {
           }
         }
       }
-
-    } // End for loop processing fds with events
-  } // End while (!terminate_flag)
+    }
+  }
 
   printf("[Process 5] Exited event loop. Cleaning up...\n");
   fflush(stdout);
-  if (log_file) {
-    fprintf(log_file, "[%ld] Exited event loop. Cleaning up...\n", time(NULL));
-    fflush(log_file);
-  }
   cleanup_ipc();
 
   printf("[Process 5] Finished.\n");
