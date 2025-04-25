@@ -32,12 +32,9 @@ int main(int argc, char *argv[]) {
     fflush(stdout);
 
     int fifo_fd = -1;
-    // Open FIFO for writing. It might block until P5 opens it for reading.
-    // P5 should create the FIFO.
     fifo_fd = open(FIFO_PATH_P2, O_WRONLY);
     if (fifo_fd < 0) {
-        perror("Process 2: Failed to open FIFO for writing");
-         printf("%s%s[Process 2 - PID: %d] Terminating due to FIFO error.%s\n", fg_code, bg_code, my_pid, COLOR_RESET);
+        printf("%s%s[Process 2 - PID: %d] Terminating due to FIFO error.%s\n", fg_code, bg_code, my_pid, COLOR_RESET);
         return EXIT_FAILURE;
     }
 
@@ -49,6 +46,8 @@ int main(int argc, char *argv[]) {
     fflush(stdout);
 
     while (!terminate_flag) {
+        waitForNewline();
+
         printf("%s%sP2 Input> %s", fg_code, bg_code, COLOR_RESET);
         fflush(stdout);
 
@@ -72,6 +71,9 @@ int main(int argc, char *argv[]) {
                  printf("%s%s[Process 2 - PID: %d] Sent: %d%s\n", fg_code, bg_code, my_pid, input_int, COLOR_RESET);
                  fflush(stdout);
             }
+            if (!terminate_flag && delay_ms > 0) {
+                usleep(delay_ms * 1000); // Pause
+            }
         } else {
             // scanf failed (e.g., EOF or invalid input)
             if (feof(stdin)) {
@@ -83,10 +85,6 @@ int main(int argc, char *argv[]) {
             }
              terminate_flag = 1; // Stop loop on input error/EOF
              break; // Exit loop immediately
-        }
-
-        if (!terminate_flag && delay_ms > 0) {
-            usleep(delay_ms * 1000); // Pause
         }
     }
 

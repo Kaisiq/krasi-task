@@ -166,35 +166,34 @@ int main() {
          while (getchar() != '\n');
 
         switch (choice) {
-            case 1: start_child(2); break;
-            case 2: start_child(3); break;
-            case 3: start_child(4); break;
-            case 4: stop_child(2); break;
-            case 5: stop_child(3); break;
-            case 6: stop_child(4); break;
+            case 1: start_child(2);  break;
+            case 2: start_child(3);  break;
+            case 3: start_child(4);  break;
+            case 4: stop_child(2);  break;
+            case 5: stop_child(3);  break;
+            case 6: stop_child(4);  break;
             case 7:
                 if (running_status[2] != 0 || running_status[3] != 0 || running_status[4] != 0) {
                     printf("Error: Cannot exit while Process 2, 3, or 4 are running.\n");
                     printf("Please stop all child processes first.\n");
                 } else {
-                     // Ensure P5 is stopped before allowing exit
                      if (running_status[5] != 0) {
                          printf("Process 5 is still running. Stopping it now...\n");
                          try_stop_p5();
                      }
                      if (running_status[5] == 0) {
                          printf("Exiting program.\n");
-                         // choice remains 7, loop condition will be met
                      } else {
                           printf("Error: Failed to stop Process 5. Cannot exit cleanly.\n");
                           choice = 0;
                      }
                 }
+
                 break;
             default:
                 printf("Invalid choice. Please try again.\n");
         }
-
+        waitForNewline();
     } while (choice != 7 || running_status[2] != 0 || running_status[3] != 0 || running_status[4] != 0 || running_status[5] != 0 );
 
     printf("Main program finished.\n");
