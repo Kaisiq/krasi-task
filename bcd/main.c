@@ -112,14 +112,19 @@ unsigned char *complement_to_10(unsigned char *bcd) {
   unsigned char *result = (unsigned char *)malloc(MAX_BCD_BYTES);
   memset(result, 0, MAX_BCD_BYTES);
 
+  unsigned char *bcdcopy = (unsigned char *)malloc(MAX_BCD_BYTES);
+  memcpy(bcdcopy, bcd, MAX_BCD_BYTES);
+
   // First create 9's complement
   for (int i = 0; i < MAX_BCD_BYTES; i++) {
     // Skip the negative prefix if present
     unsigned char high =
-        (i == 0 && is_negative(bcd)) ? 0 : 9 - ((bcd[i] >> 4) & 0x0F);
-    unsigned char low = 9 - (bcd[i] & 0x0F);
+        (i == 0 && is_negative(bcdcopy)) ? 0 : 9 - ((bcdcopy[i] >> 4) & 0x0F);
+        unsigned char low = 9 - (bcdcopy[i] & 0x0F);
     result[i] = (high << 4) | low;
   }
+
+  free(bcdcopy);
 
   // Add 1 to get 10's complement
   int carry = 1;
@@ -175,21 +180,16 @@ unsigned char *bcd_add(unsigned char *a, unsigned char *b) {
   }
   // Case 2: -A + B = B - A
   else if (a_neg && !b_neg) {
-    unsigned char *pos_a = (unsigned char *)malloc(MAX_BCD_BYTES);
-    memcpy(pos_a, a, MAX_BCD_BYTES);
-    pos_a[0] &= 0x0F;
-    result = bcd_subtract(b, pos_a);
-    free(pos_a);
+    unsigned char *a_complement = complement_to_10(a);
+    result = bcd_add(a_complement, b);
+
   }
   // Case 3: A + (-B) = A - B
   else if (!a_neg && b_neg) {
-    unsigned char *b_complement = complement_to_10(b);
+    unsigned char *b_complement = complement_to_10(b); //doesnt work
+    // -8 -> 1001 1001 1001 1001 1001 1001 1001 1001 0010
+    print_bcd_bin(b_complement); // TODO: remove (debugging)
     result = bcd_add(a, b_complement);
-    // unsigned char *pos_b = (unsigned char *)malloc(MAX_BCD_BYTES);
-    // memcpy(pos_b, b, MAX_BCD_BYTES);
-    // pos_b[0] &= 0x0F; // Clear negative flag
-    // result = bcd_subtract(a, pos_b);
-    // free(pos_b);
   }
   // Case 4: -A + (-B) = -(A + B)
   else {
@@ -281,8 +281,11 @@ unsigned char *bcd_subtract(unsigned char *a, unsigned char *b) {
 
   // Case 1: A - B = A + (-B)
   if (!a_neg && !b_neg) {
-    set_negative(b);
-    result = bcd_add(a, b);
+    unsigned char *neg_b = (unsigned char *)malloc(MAX_BCD_BYTES);
+    memcpy(neg_b, b, MAX_BCD_BYTES);
+    set_negative(neg_b);
+    result = bcd_add(a, neg_b);
+    free(neg_b);
   }
   // Case 2: A - (-B) = A + B
   else if (!a_neg && b_neg) {
