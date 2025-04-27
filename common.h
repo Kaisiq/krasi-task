@@ -5,27 +5,26 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
-#include <sys/types.h>
 #include <signal.h>
 #include <termios.h>
 #include <sys/types.h>
 #include <sys/time.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <mqueue.h>
+#include <sys/stat.h>
 
 // --- IPC Definitions ---
-#define FIFO_PATH_P2 "./p5_fifo_p2"  // <<<--- ПРОМЯНА: Преименуван за яснота (Process 2 -> Process 5)
-#define FIFO_PATH_P3 "./p5_fifo_p3"  // <<<--- НОВО: FIFO за Process 3 (Process 3 -> Process 5)
-#define SOCKET_PATH "./p5_socket"    // Process 4 -> Process 5 (Unix Domain Socket)
+#define FIFO_PATH_P2 "./p5_fifo_p2"
+#define MSGQ_NAME "/p5_mq_p3"
+#define SOCKET_PATH "./p5_socket"
 
 // --- FIFO Structures ---
 typedef struct {
     int source_pid;
     int value;
-} fifo_msg_int; // За Процес 2
+} fifo_msg_int;
 
-typedef struct {
-    int source_pid;
-    double value;
-} fifo_msg_float; // <<<--- НОВО: За Процес 3
 
 // --- Socket ---
 #define SOCK_MSG_MAX_LEN 256
@@ -35,15 +34,13 @@ typedef struct {
 } sock_msg_string;
 
 
-// --- Message Queue (ПРЕМАХНАТО) ---
-// #define MSGQ_NAME "/p5_mq"
-// #define MSG_MAX_SIZE 1024
-// #define MSGQ_PERMS 0666
-// typedef struct {
-//     long mtype;
-//     int source_pid;
-//     double value;
-// } mq_msg_float;
+#define MSG_MAX_SIZE 1024
+#define MSGQ_PERMS 0666
+typedef struct {
+    long mtype;
+    int source_pid;
+    double value;
+} mq_msg_float;
 
 
 // --- Права за FIFO ---
@@ -96,12 +93,14 @@ int kbhit (void)
   return FD_ISSET(STDIN_FILENO, &rdfs);
 }
 
-void waitForNewline(){
-    while(1){
+int waitForKbhit(){
+    for(int i=0; i<100; ++i){
         if(kbhit()){
-            break;
+            return 1;
         }
+        usleep(100);
     }
+    return 0;
 }
 
 #endif // COMMON_H

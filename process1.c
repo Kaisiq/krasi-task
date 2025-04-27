@@ -102,6 +102,7 @@ void start_child(int process_num) {
         printf("Process %d started with PID: %d\n", process_num, pids[process_num]);
         running_status[process_num] = 1;
     }
+    usleep(delay_ms * 1000);
 }
 
 void stop_child(int process_num) {
@@ -157,21 +158,28 @@ int main() {
 
     do {
         display_menu();
+        sleep(1);
+        if(!kbhit()){
+            sleep(1);
+            continue;
+        }
+
         if (scanf("%d", &choice) != 1) {
              printf("Invalid input. Please enter a number.\n");
              while (getchar() != '\n');
              choice = 0;
+             usleep(2000*1000);
              continue;
         }
          while (getchar() != '\n');
 
         switch (choice) {
-            case 1: start_child(2); waitForNewline(); break;
-            case 2: start_child(3); waitForNewline(); break;
-            case 3: start_child(4); waitForNewline(); break;
-            case 4: stop_child(2); waitForNewline(); break;
-            case 5: stop_child(3); waitForNewline(); break;
-            case 6: stop_child(4); waitForNewline(); break;
+            case 1: start_child(2); break;
+            case 2: start_child(3); break;
+            case 3: start_child(4); break;
+            case 4: stop_child(2); break;
+            case 5: stop_child(3); break;
+            case 6: stop_child(4); break;
             case 7:
                 if (running_status[2] != 0 || running_status[3] != 0 || running_status[4] != 0) {
                     printf("Error: Cannot exit while Process 2, 3, or 4 are running.\n");

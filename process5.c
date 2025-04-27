@@ -1,13 +1,8 @@
 #include <string.h>
 #define _POSIX_C_SOURCE 200809L // Или може да опитате с 199309L
 #include "common.h"
-#include <errno.h>
-#include <fcntl.h>
-// #include <mqueue.h> // <<<--- ПРЕМАХНАТО
 #include <poll.h>
-#include <signal.h>
 #include <sys/socket.h>
-#include <sys/stat.h>
 #include <sys/un.h>
 #include <time.h>
 
@@ -15,8 +10,7 @@ volatile sig_atomic_t terminate_flag = 0;
 
 // FDs for IPC
 int fifo_p2_fd = -1;  // <<<--- ПРОМЯНА: Преименуван за яснота
-int fifo_p3_fd = -1;  // <<<--- НОВО: FD за FIFO от Процес 3
-// mqd_t mq = (mqd_t)-2; // <<<--- ПРЕМАХНАТО
+mqd_t mq = (mqd_t)-1; // Message queue descriptor
 int listen_sock_fd = -1;
 int client_sock_fd = -1;
 FILE *log_file = NULL;
@@ -38,9 +32,10 @@ void cleanup_ipc() {
     close(fifo_p2_fd);
     fifo_p2_fd = -1;
   }
-  if (fifo_p3_fd >= 0) {
-    close(fifo_p3_fd);
-    fifo_p3_fd = -1;
+  if (mq != (mqd_t)-1) {
+    mq_close(mq);
+    mq_unlink(MSGQ_NAME);
+    mq = (mqd_t)-1;
   }
   // if (mq != (mqd_t)-1) { mq_close(mq); mq = (mqd_t)-1; } // <<<--- ПРЕМАХНАТО
   if (client_sock_fd >= 0) {
@@ -54,11 +49,9 @@ void cleanup_ipc() {
 
   if (unlink(FIFO_PATH_P2) < 0 && errno != ENOENT)
     perror(
-        "  unlink fifo_p2 failed"); // <<<--- ПРОМЯНА: Използване на новото име
-  if (unlink(FIFO_PATH_P3) < 0 && errno != ENOENT)
-    perror("  unlink fifo_p3 failed"); // <<<--- НОВО: Изтриване на втория FIFO
-  // if (mq_unlink(MSGQ_NAME) < 0 && errno != ENOENT) perror("  mq_unlink
-  // failed"); // <<<--- ПРЕМАХНАТО
+        "  unlink fifo_p2 failed");
+  if (mq_unlink(MSGQ_NAME) < 0 && errno != ENOENT)
+    perror("  mq_unlink failed");
   if (unlink(SOCKET_PATH) < 0 && errno != ENOENT)
     perror("  unlink socket failed");
   printf("[Process 5] Cleanup attempts complete.\n");
@@ -71,27 +64,30 @@ int openP2File() {
     perror("  ERROR: Failed to create FIFO P2");
     return 0;
   }
-    fifo_p2_fd =
-        open(FIFO_PATH_P2,
-                O_RDONLY | O_NONBLOCK); // <<<--- ПРОМЯНА: Име на променлива и път
-    if (fifo_p2_fd < 0) {
-        perror("  ERROR: Failed to open FIFO P2 for reading");
-        return 0;
-    }
+  fifo_p2_fd =
+      open(FIFO_PATH_P2,
+           O_RDONLY | O_NONBLOCK); // <<<--- ПРОМЯНА: Име на променлива и път
+  if (fifo_p2_fd < 0) {
+    perror("  ERROR: Failed to open FIFO P2 for reading");
+    return 0;
+  }
   return 1;
 }
 
 int openP3File() {
-  if (mkfifo(FIFO_PATH_P3, FIFO_PERMS) < 0 && errno != EEXIST) {
-    perror("  ERROR: Failed to create FIFO P3");
+    struct mq_attr attr;
+
+    attr.mq_flags = 0;
+    attr.mq_maxmsg = 10;
+    attr.mq_msgsize = sizeof(mq_msg_float);
+    attr.mq_curmsgs = 0;
+
+    mq = mq_open(MSGQ_NAME, O_RDONLY | O_CREAT | O_NONBLOCK, 0666, &attr);
+    if (mq == (mqd_t)-1) {
+    perror("  ERROR: Failed to open message queue");
     return 0;
-  }
-    fifo_p3_fd = open(FIFO_PATH_P3, O_RDONLY | O_NONBLOCK);
-    if (fifo_p3_fd < 0) {
-      perror("  ERROR: Failed to open FIFO P3 for reading");
-      return 0;
     }
-  return 1;
+    return 1;
 }
 
 int openP4File() {
@@ -113,10 +109,10 @@ int openP4File() {
       return 0;
     }
     if (listen(listen_sock_fd, 1) < 0) {
-        perror("  ERROR: Failed to listen on socket");
-        close(listen_sock_fd);
-        listen_sock_fd = -1;
-        return 0;
+      perror("  ERROR: Failed to listen on socket");
+      close(listen_sock_fd);
+      listen_sock_fd = -1;
+      return 0;
     }
     fcntl(listen_sock_fd, F_SETFL, O_NONBLOCK);
   }
@@ -125,7 +121,7 @@ int openP4File() {
 
 void errorOnStart() {
   printf("[Process 5] CRITICAL: Failed to initialize one or more IPC "
-                  "mechanisms. Terminating.\n");
+         "mechanisms. Terminating.\n");
   fflush(stderr);
   cleanup_ipc();
 }
@@ -169,11 +165,11 @@ int main(int argc, char *argv[]) {
     fds[nfds].events = POLLIN;
     nfds++;
   }
-  if (fifo_p3_fd != -1) { // <<<--- НОВО: Добавяне на втория FIFO
-    fds[nfds].fd = fifo_p3_fd;
-    fds[nfds].events = POLLIN;
-    nfds++;
-  }
+  if (mq != (mqd_t)-1) { // <<<--- НОВО: Добавяне на message queue
+      fds[nfds].fd = mq;
+      fds[nfds].events = POLLIN;
+      nfds++;
+    }
   // if (mq != (mqd_t)-1) { ... } // <<<--- ПРЕМАХНАТО
   if (listen_sock_fd != -1) {
     fds[nfds].fd = listen_sock_fd;
@@ -278,35 +274,30 @@ int main(int argc, char *argv[]) {
         }
       }
 
-      // Check FIFO P3 <<<--- НОВА ЛОГИКА ---
-      else if (fds[i].fd == fifo_p3_fd && (fds[i].revents & POLLIN)) {
-        fifo_msg_float fifo_msg; // Използвай структурата за float
-        ssize_t bytes_read = read(fifo_p3_fd, &fifo_msg, sizeof(fifo_msg));
-        if (bytes_read == sizeof(fifo_msg)) {
-          printf("[Process 5] Received from P3 (FIFO, PID %d): %f\n",
-                 fifo_msg.source_pid, fifo_msg.value);
-          fflush(stdout);
-        } else if (bytes_read == 0) { // EOF
-          printf("[Process 5] Process 3 (FIFO P3) closed connection.\n");
-          fflush(stdout);
-          close(fifo_p3_fd);
-          fds[i].fd = -1;
-          fifo_p3_fd = -1;
-        } else if (errno != EAGAIN && errno != EWOULDBLOCK) { // Error
-          perror("Process 5: Error reading from FIFO P3");
-          close(fifo_p3_fd);
-          fds[i].fd = -1;
-          fifo_p3_fd = -1;
+      // Check Message Queue <<<--- НОВА ЛОГИКА ---
+    else if (fds[i].fd == mq && (fds[i].revents & POLLIN)) {
+        mq_msg_float mq_msg;
+        ssize_t bytes_read = mq_receive(mq, (char *)&mq_msg, sizeof(mq_msg),
+                                        NULL); // No priority
+        if (bytes_read == sizeof(mq_msg)) {
+        printf("[Process 5] Received from P3 (Message Queue, PID %d): %f\n",
+                mq_msg.source_pid, mq_msg.value);
+        fflush(stdout);
+        if (log_file)
+            fprintf(log_file, "[%ld] P3(%d): %f\n", (long)time(NULL),
+                    mq_msg.source_pid, mq_msg.value);
+        fflush(log_file);
+        } else {
+        perror("Process 5: Error receiving from message queue");
         }
-      }
+    }
 
       // Check Message Queue <<<--- ПРЕМАХНАТО ---
       // else if (fds[i].fd == mq && ...) { ... }
 
       // Check Client Socket
       else if (fds[i].fd == client_sock_fd && client_sock_fd != -1) {
-        // ... (кодът за четене от сокета остава същият) ...
-        if (fds[i].revents & (POLLHUP | POLLERR)) { // Check HUP/ERR first
+        if (fds[i].revents & (POLLHUP | POLLERR)) {
           printf("[Process 5] Error/Hangup on Process 4 socket connection (FD "
                  "%d).\n",
                  client_sock_fd);
@@ -315,7 +306,7 @@ int main(int argc, char *argv[]) {
           fds[i].fd = -1;
           client_sock_fd = -1;
           client_fds_index = -1;
-        } else if (fds[i].revents & POLLIN) { // Check for data
+        } else if (fds[i].revents & POLLIN) {
           sock_msg_string sock_msg;
           ssize_t bytes_received =
               recv(client_sock_fd, &sock_msg, sizeof(sock_msg), 0);
@@ -323,7 +314,7 @@ int main(int argc, char *argv[]) {
             printf("[Process 5] Received from P4 (Socket, PID %d): \"%s\"\n",
                    sock_msg.source_pid, sock_msg.value);
             fflush(stdout);
-          } else if (bytes_received == 0) { // Connection closed gracefully
+          } else if (bytes_received == 0) {
             printf("[Process 5] Process 4 (Socket FD %d) closed connection.\n",
                    client_sock_fd);
             fflush(stdout);
@@ -331,7 +322,7 @@ int main(int argc, char *argv[]) {
             fds[i].fd = -1;
             client_sock_fd = -1;
             client_fds_index = -1;
-          } else if (errno != EAGAIN && errno != EWOULDBLOCK) { // Error on recv
+          } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
             perror("Process 5: recv failed");
             close(client_sock_fd);
             fds[i].fd = -1;
