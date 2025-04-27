@@ -48,8 +48,7 @@ void cleanup_ipc() {
   }
 
   if (unlink(FIFO_PATH_P2) < 0 && errno != ENOENT)
-    perror(
-        "  unlink fifo_p2 failed");
+    perror("  unlink fifo_p2 failed");
   if (mq_unlink(MSGQ_NAME) < 0 && errno != ENOENT)
     perror("  mq_unlink failed");
   if (unlink(SOCKET_PATH) < 0 && errno != ENOENT)
@@ -75,19 +74,19 @@ int openP2File() {
 }
 
 int openP3File() {
-    struct mq_attr attr;
+  struct mq_attr attr;
 
-    attr.mq_flags = 0;
-    attr.mq_maxmsg = 10;
-    attr.mq_msgsize = sizeof(mq_msg_float);
-    attr.mq_curmsgs = 0;
+  attr.mq_flags = 0;
+  attr.mq_maxmsg = 10;
+  attr.mq_msgsize = sizeof(mq_msg_float);
+  attr.mq_curmsgs = 0;
 
-    mq = mq_open(MSGQ_NAME, O_RDONLY | O_CREAT | O_NONBLOCK, 0666, &attr);
-    if (mq == (mqd_t)-1) {
+  mq = mq_open(MSGQ_NAME, O_RDONLY | O_CREAT | O_NONBLOCK, 0666, &attr);
+  if (mq == (mqd_t)-1) {
     perror("  ERROR: Failed to open message queue");
     return 0;
-    }
-    return 1;
+  }
+  return 1;
 }
 
 int openP4File() {
@@ -166,10 +165,10 @@ int main(int argc, char *argv[]) {
     nfds++;
   }
   if (mq != (mqd_t)-1) { // <<<--- НОВО: Добавяне на message queue
-      fds[nfds].fd = mq;
-      fds[nfds].events = POLLIN;
-      nfds++;
-    }
+    fds[nfds].fd = mq;
+    fds[nfds].events = POLLIN;
+    nfds++;
+  }
   // if (mq != (mqd_t)-1) { ... } // <<<--- ПРЕМАХНАТО
   if (listen_sock_fd != -1) {
     fds[nfds].fd = listen_sock_fd;
@@ -275,22 +274,22 @@ int main(int argc, char *argv[]) {
       }
 
       // Check Message Queue <<<--- НОВА ЛОГИКА ---
-    else if (fds[i].fd == mq && (fds[i].revents & POLLIN)) {
+      else if (fds[i].fd == mq && (fds[i].revents & POLLIN)) {
         mq_msg_float mq_msg;
         ssize_t bytes_read = mq_receive(mq, (char *)&mq_msg, sizeof(mq_msg),
                                         NULL); // No priority
         if (bytes_read == sizeof(mq_msg)) {
-        printf("[Process 5] Received from P3 (Message Queue, PID %d): %f\n",
-                mq_msg.source_pid, mq_msg.value);
-        fflush(stdout);
-        if (log_file)
+          printf("[Process 5] Received from P3 (Message Queue, PID %d): %f\n",
+                 mq_msg.source_pid, mq_msg.value);
+          fflush(stdout);
+          if (log_file)
             fprintf(log_file, "[%ld] P3(%d): %f\n", (long)time(NULL),
                     mq_msg.source_pid, mq_msg.value);
-        fflush(log_file);
+          fflush(log_file);
         } else {
-        perror("Process 5: Error receiving from message queue");
+          perror("Process 5: Error receiving from message queue");
         }
-    }
+      }
 
       // Check Message Queue <<<--- ПРЕМАХНАТО ---
       // else if (fds[i].fd == mq && ...) { ... }

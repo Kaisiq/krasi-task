@@ -2,7 +2,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
-#include <time.h> // For usleep
+#include <time.h>
 
 volatile sig_atomic_t terminate_flag = 0;
 
