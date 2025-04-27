@@ -1,838 +1,674 @@
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define MAX_BCD_BYTES 5
 #define NEGATIVE_PREFIX 0xF
 #define MAX_ADD_SUBTRACT_DIGITS 8
 #define MAX_MULTIPLY_DIGITS 4
 
-// Function declarations
-void print_bcd_bin(unsigned char* bcd);
-void print_bcd_hex(unsigned char* bcd);
-void int_to_bcd(int num, unsigned char* result);
-unsigned char* bcd_add(unsigned char* a, unsigned char* b);
-unsigned char* bcd_subtract(unsigned char* a, unsigned char* b);
-unsigned char* bcd_multiply(unsigned char* a, unsigned char* b);
-int bcd_compare(unsigned char* a, unsigned char* b);
-unsigned char* complement_to_10(unsigned char* bcd);
-int is_negative(unsigned char* bcd);
-void set_negative(unsigned char* bcd);
-int count_digits(unsigned char* bcd);
-int validate_for_add_subtract(unsigned char* a, unsigned char* b);
-int validate_for_multiply(unsigned char* a, unsigned char* b);
+void print_bcd_bin(unsigned char *bcd);
+void print_bcd_hex(unsigned char *bcd);
+void int_to_bcd(int num, unsigned char *result);
+unsigned char *bcd_add(unsigned char *a, unsigned char *b);
+unsigned char *bcd_subtract(unsigned char *a, unsigned char *b);
+unsigned char *bcd_multiply(unsigned char *a, unsigned char *b);
+int bcd_compare(unsigned char *a, unsigned char *b);
+unsigned char *complement_to_10(unsigned char *bcd);
+int is_negative(unsigned char *bcd);
+void set_negative(unsigned char *bcd);
+int count_digits(unsigned char *bcd);
+int validate_for_add_subtract(unsigned char *a, unsigned char *b);
+int validate_for_multiply(unsigned char *a, unsigned char *b);
 
-// Helper functions
-void bitwise_full_adder_1bit(int a, int b, int cin, int* sum_out, int* cout_out) {
-    *sum_out = (a ^ b) ^ cin;
-    *cout_out = (a & b) | (a & cin) | (b & cin);
+void bitwise_full_adder_1bit(int a, int b, int cin, int *sum_out,
+                             int *cout_out) {
+  *sum_out = (a ^ b) ^ cin;
+  *cout_out = (a & b) | (a & cin) | (b & cin);
 }
 
-int bitwise_add_4bit_binary(int nibble_a, int nibble_b, int cin, int* cout_4bit) {
-    int s0, s1, s2, s3;
-    int c0, c1, c2, c3;
-    nibble_a &= 0x0F;
-    nibble_b &= 0x0F;
-    cin &= 1;
+int bitwise_add_4bit_binary(int nibble_a, int nibble_b, int cin,
+                            int *cout_4bit) {
+  int s0, s1, s2, s3;
+  int c0, c1, c2, c3;
+  nibble_a &= 0x0F;
+  nibble_b &= 0x0F;
+  cin &= 1;
 
-    bitwise_full_adder_1bit(nibble_a & 1, nibble_b & 1, cin, &s0, &c0);
-    bitwise_full_adder_1bit((nibble_a >> 1) & 1, (nibble_b >> 1) & 1, c0, &s1, &c1);
-    bitwise_full_adder_1bit((nibble_a >> 2) & 1, (nibble_b >> 2) & 1, c1, &s2, &c2);
-    bitwise_full_adder_1bit((nibble_a >> 3) & 1, (nibble_b >> 3) & 1, c2, &s3, &c3);
+  bitwise_full_adder_1bit(nibble_a & 1, nibble_b & 1, cin, &s0, &c0);
+  bitwise_full_adder_1bit((nibble_a >> 1) & 1, (nibble_b >> 1) & 1, c0, &s1,
+                          &c1);
+  bitwise_full_adder_1bit((nibble_a >> 2) & 1, (nibble_b >> 2) & 1, c1, &s2,
+                          &c2);
+  bitwise_full_adder_1bit((nibble_a >> 3) & 1, (nibble_b >> 3) & 1, c2, &s3,
+                          &c3);
 
-    int sum_4bit = (s3 << 3) | (s2 << 2) | (s1 << 1) | s0;
-    *cout_4bit = c3;
-    return sum_4bit;
+  int sum_4bit = (s3 << 3) | (s2 << 2) | (s1 << 1) | s0;
+  *cout_4bit = c3;
+  return sum_4bit;
 }
 
-int bitwise_add_bcd_nibble(int a_nib, int b_nib, int cin, int* cout_bcd) {
-    int binary_sum_carry = 0;
-    int binary_sum = bitwise_add_4bit_binary(a_nib, b_nib, cin, &binary_sum_carry);
+int bitwise_add_bcd_nibble(int a_nib, int b_nib, int cin, int *cout_bcd) {
+  int binary_sum_carry = 0;
+  int binary_sum =
+      bitwise_add_4bit_binary(a_nib, b_nib, cin, &binary_sum_carry);
 
-    int s3 = (binary_sum >> 3) & 1;
-    int s2 = (binary_sum >> 2) & 1;
-    int s1 = (binary_sum >> 1) & 1;
+  int s3 = (binary_sum >> 3) & 1;
+  int s2 = (binary_sum >> 2) & 1;
+  int s1 = (binary_sum >> 1) & 1;
 
-    int correction_needed = binary_sum_carry | (s3 & (s2 | s1));
-    int final_sum = binary_sum;
-    int correction_carry = 0;
+  int correction_needed = binary_sum_carry | (s3 & (s2 | s1));
+  int final_sum = binary_sum;
+  int correction_carry = 0;
 
-    if (correction_needed) {
-        final_sum = bitwise_add_4bit_binary(binary_sum, 0x06, 0, &correction_carry);
+  if (correction_needed) {
+    final_sum = bitwise_add_4bit_binary(binary_sum, 0x06, 0, &correction_carry);
+  }
+
+  *cout_bcd = binary_sum_carry | correction_needed;
+  return final_sum & 0x0F;
+}
+
+int is_negative(unsigned char *bcd) { return (bcd[0] >> 4) == NEGATIVE_PREFIX; }
+
+void set_negative(unsigned char *bcd) {
+  bcd[0] = (NEGATIVE_PREFIX << 4) | (bcd[0] & 0x0F);
+}
+
+void int_to_bcd(int num, unsigned char *result) {
+  memset(result, 0, MAX_BCD_BYTES);
+
+  if (num > 99999999 || num < -99999999) {
+    printf("Error: Number must be between -99999999 and 99999999\n");
+    return;
+  }
+
+  int is_neg = num < 0;
+  if (is_neg)
+    num = -num;
+
+  int idx = MAX_BCD_BYTES - 1;
+  while (num > 0 && idx >= 0) {
+    int digit1 = num % 10;
+    num /= 10;
+
+    int digit2 = 0;
+    if (num > 0) {
+      digit2 = num % 10;
+      num /= 10;
     }
 
-    *cout_bcd = binary_sum_carry | correction_needed;
-    return final_sum & 0x0F;
+    result[idx] = ((digit2 & 0x0F) << 4) | (digit1 & 0x0F);
+    idx--;
+  }
+
+  if (is_neg) {
+    set_negative(result);
+  }
 }
 
-// Check if BCD number is negative
-int is_negative(unsigned char* bcd) {
-    return (bcd[0] >> 4) == NEGATIVE_PREFIX;
+unsigned char *complement_to_10(unsigned char *bcd) {
+  unsigned char *result = (unsigned char *)malloc(MAX_BCD_BYTES);
+  memset(result, 0, MAX_BCD_BYTES);
+
+  // First create 9's complement
+  for (int i = 0; i < MAX_BCD_BYTES; i++) {
+    // Skip the negative prefix if present
+    unsigned char high =
+        (i == 0 && is_negative(bcd)) ? 0 : 9 - ((bcd[i] >> 4) & 0x0F);
+    unsigned char low = 9 - (bcd[i] & 0x0F);
+    result[i] = (high << 4) | low;
+  }
+
+  // Add 1 to get 10's complement
+  int carry = 1;
+  for (int i = MAX_BCD_BYTES - 1; i >= 0; i--) {
+    int low = (result[i] & 0x0F) + carry;
+    carry = low > 9 ? 1 : 0;
+    if (carry)
+      low -= 10;
+
+    int high = ((result[i] >> 4) & 0x0F);
+    if (carry) {
+      high++;
+      carry = high > 9 ? 1 : 0;
+      if (carry)
+        high -= 10;
+    }
+
+    result[i] = (high << 4) | low;
+  }
+
+  return result;
 }
 
-// Set BCD number as negative
-void set_negative(unsigned char* bcd) {
-    bcd[0] = (NEGATIVE_PREFIX << 4) | (bcd[0] & 0x0F);
-}
+unsigned char *bcd_add(unsigned char *a, unsigned char *b) {
+  if (!validate_for_add_subtract(a, b)) {
+    return NULL;
+  }
 
-// Convert integer to BCD
-void int_to_bcd(int num, unsigned char* result) {
-    memset(result, 0, MAX_BCD_BYTES);
+  unsigned char *result = (unsigned char *)malloc(MAX_BCD_BYTES);
+  memset(result, 0, MAX_BCD_BYTES);
 
-    // Check if number is within valid range (-99999999 to 99999999)
-    if (num > 99999999 || num < -99999999) {
-        printf("Error: Number must be between -99999999 and 99999999\n");
-        return;
-    }
+  int a_neg = is_negative(a);
+  int b_neg = is_negative(b);
 
-    int is_neg = num < 0;
-    if (is_neg) num = -num;
-
-    int idx = MAX_BCD_BYTES - 1;
-    while (num > 0 && idx >= 0) {
-        int digit1 = num % 10;
-        num /= 10;
-
-        int digit2 = 0;
-        if (num > 0) {
-            digit2 = num % 10;
-            num /= 10;
-        }
-
-        result[idx] = ((digit2 & 0x0F) << 4) | (digit1 & 0x0F);
-        idx--;
-    }
-
-    if (is_neg) {
-        set_negative(result);
-    }
-}
-
-// Complement to 10 operation
-unsigned char* complement_to_10(unsigned char* bcd) {
-    unsigned char* result = (unsigned char*)malloc(MAX_BCD_BYTES);
-    memset(result, 0, MAX_BCD_BYTES);
-
-    // First create 9's complement
-    for (int i = 0; i < MAX_BCD_BYTES; i++) {
-        // Skip the negative prefix if present
-        unsigned char high = (i == 0 && is_negative(bcd)) ? 0 : 9 - ((bcd[i] >> 4) & 0x0F);
-        unsigned char low = 9 - (bcd[i] & 0x0F);
-        result[i] = (high << 4) | low;
-    }
-
-    // Add 1 to get 10's complement
-    int carry = 1;
+  // Case 1: A + B (both positive)
+  if (!a_neg && !b_neg) {
+    int carry = 0;
     for (int i = MAX_BCD_BYTES - 1; i >= 0; i--) {
-        int low = (result[i] & 0x0F) + carry;
-        carry = low > 9 ? 1 : 0;
-        if (carry) low -= 10;
+      int a_low = a[i] & 0x0F;
+      int b_low = b[i] & 0x0F;
+      int a_high = (a[i] >> 4) & 0x0F;
+      int b_high = (b[i] >> 4) & 0x0F;
 
-        int high = ((result[i] >> 4) & 0x0F);
-        if (carry) {
-            high++;
-            carry = high > 9 ? 1 : 0;
-            if (carry) high -= 10;
-        }
+      int sum_low = 0, carry_low = 0;
+      int sum_high = 0, carry_high = 0;
 
-        result[i] = (high << 4) | low;
+      sum_low = bitwise_add_bcd_nibble(a_low, b_low, carry, &carry_low);
+      sum_high = bitwise_add_bcd_nibble(a_high, b_high, carry_low, &carry_high);
+
+      result[i] = (sum_high << 4) | sum_low;
+      carry = carry_high;
     }
-
-    return result;
-}
-
-// Add two BCD numbers
-unsigned char* bcd_add(unsigned char* a, unsigned char* b) {
-    if (!validate_for_add_subtract(a, b)) {
-        return NULL;
-    }
-
-    unsigned char* result = (unsigned char*)malloc(MAX_BCD_BYTES);
-    memset(result, 0, MAX_BCD_BYTES);
-
-    int a_neg = is_negative(a);
-    int b_neg = is_negative(b);
-
-    // Case 1: A + B (both positive)
-    if (!a_neg && !b_neg) {
-        int carry = 0;
-        for (int i = MAX_BCD_BYTES - 1; i >= 0; i--) {
-            int a_low = a[i] & 0x0F;
-            int b_low = b[i] & 0x0F;
-            int a_high = (a[i] >> 4) & 0x0F;
-            int b_high = (b[i] >> 4) & 0x0F;
-
-            int sum_low = 0, carry_low = 0;
-            int sum_high = 0, carry_high = 0;
-
-            sum_low = bitwise_add_bcd_nibble(a_low, b_low, carry, &carry_low);
-            sum_high = bitwise_add_bcd_nibble(a_high, b_high, carry_low, &carry_high);
-
-            result[i] = (sum_high << 4) | sum_low;
-            carry = carry_high;
-        }
-    }
-    // Case 2: -A + B = B - A
-    else if (a_neg && !b_neg) {
-        unsigned char* pos_a = (unsigned char*)malloc(MAX_BCD_BYTES);
-        memcpy(pos_a, a, MAX_BCD_BYTES);
-        pos_a[0] &= 0x0F;  // Clear negative flag
-        result = bcd_subtract(b, pos_a);
-        free(pos_a);
-    }
-    // Case 3: A + (-B) = A - B
-    else if (!a_neg && b_neg) {
-        unsigned char* pos_b = (unsigned char*)malloc(MAX_BCD_BYTES);
-        memcpy(pos_b, b, MAX_BCD_BYTES);
-        pos_b[0] &= 0x0F;  // Clear negative flag
-        result = bcd_subtract(a, pos_b);
-        free(pos_b);
-    }
-    // Case 4: -A + (-B) = -(A + B)
-    else {
-        unsigned char* pos_a = (unsigned char*)malloc(MAX_BCD_BYTES);
-        unsigned char* pos_b = (unsigned char*)malloc(MAX_BCD_BYTES);
-        memcpy(pos_a, a, MAX_BCD_BYTES);
-        memcpy(pos_b, b, MAX_BCD_BYTES);
-        pos_a[0] &= 0x0F;  // Clear negative flags
-        pos_b[0] &= 0x0F;
-        result = bcd_add(pos_a, pos_b);
-        set_negative(result);
-        free(pos_a);
-        free(pos_b);
-    }
-
-    return result;
-}
-
-// Count number of significant digits in a BCD number
-int count_digits(unsigned char* bcd) {
-    int digits = 0;
-    int started = 0;
-    int is_neg = is_negative(bcd);
-
-    for (int i = 0; i < MAX_BCD_BYTES; i++) {
-        unsigned char high = (bcd[i] >> 4) & 0x0F;
-        unsigned char low = bcd[i] & 0x0F;
-
-        // Skip negative flag for first byte
-        if (i == 0 && is_neg) {
-            if (low != 0) {
-                digits++;
-                started = 1;
-            }
-            continue;
-        }
-
-        // Count high nibble if non-zero or we've started counting
-        if (high != 0 || started) {
-            digits++;
-            started = 1;
-        }
-
-        // Count low nibble if non-zero or we've started counting
-        if (low != 0 || started) {
-            digits++;
-            started = 1;
-        }
-    }
-
-    return digits == 0 ? 1 : digits;  // Return at least 1 for zero
-}
-
-// Validate numbers for addition and subtraction
-int validate_for_add_subtract(unsigned char* a, unsigned char* b) {
-    int a_digits = count_digits(a);
-    int b_digits = count_digits(b);
-
-    if (a_digits > MAX_ADD_SUBTRACT_DIGITS || b_digits > MAX_ADD_SUBTRACT_DIGITS) {
-        printf("Error: Numbers must not exceed %d digits for addition/subtraction\n",
-               MAX_ADD_SUBTRACT_DIGITS);
-        return 0;
-    }
-    return 1;
-}
-
-// Validate numbers for multiplication
-int validate_for_multiply(unsigned char* a, unsigned char* b) {
-    int a_digits = count_digits(a);
-    int b_digits = count_digits(b);
-
-    if (a_digits > MAX_MULTIPLY_DIGITS || b_digits > MAX_MULTIPLY_DIGITS) {
-        printf("Error: Numbers must not exceed %d digits for multiplication\n",
-               MAX_MULTIPLY_DIGITS);
-        return 0;
-    }
-    return 1;
-}
-
-// Subtract two BCD numbers
-unsigned char* bcd_subtract(unsigned char* a, unsigned char* b) {
-    if (!validate_for_add_subtract(a, b)) {
-        return NULL;
-    }
-
-    unsigned char* result = (unsigned char*)malloc(MAX_BCD_BYTES);
-    memset(result, 0, MAX_BCD_BYTES);
-
-    int a_neg = is_negative(a);
-    int b_neg = is_negative(b);
-
-    // Case 1: A - B = A + (-B)
-    if (!a_neg && !b_neg) {
-        // Compare numbers first
-        int cmp = bcd_compare(a, b);
-
-        if (cmp >= 0) {
-            // A >= B, perform direct subtraction
-            int borrow = 0;
-            for (int i = MAX_BCD_BYTES - 1; i >= 0; i--) {
-                int a_low = a[i] & 0x0F;
-                int b_low = b[i] & 0x0F;
-                int a_high = (a[i] >> 4) & 0x0F;
-                int b_high = (b[i] >> 4) & 0x0F;
-
-                // Process low digit
-                if (borrow) {
-                    if (a_low == 0) {
-                        a_low = 9;
-                        if (a_high > 0) {
-                            a_high--;
-                        } else {
-                            int j = i - 1;
-                            while (j >= 0) {
-                                int high = (a[j] >> 4) & 0x0F;
-                                int low = a[j] & 0x0F;
-                                if (low > 0) {
-                                    low--;
-                                    result[j] = (high << 4) | low;
-                                    break;
-                                } else if (high > 0) {
-                                    high--;
-                                    low = 9;
-                                    result[j] = (high << 4) | low;
-                                    break;
-                                }
-                                result[j] = 0x99;
-                                j--;
-                            }
-                        }
-                    } else {
-                        a_low--;
-                    }
-                    borrow = 0;
-                }
-
-                if (a_low < b_low) {
-                    a_low += 10;
-                    borrow = 1;
-                }
-                int diff_low = a_low - b_low;
-
-                // Process high digit
-                if (borrow) {
-                    if (a_high == 0) {
-                        a_high = 9;
-                        int j = i - 1;
-                        while (j >= 0) {
-                            int high = (result[j] >> 4) & 0x0F;
-                            int low = result[j] & 0x0F;
-                            if (low > 0) {
-                                low--;
-                                result[j] = (high << 4) | low;
-                                break;
-                            } else if (high > 0) {
-                                high--;
-                                low = 9;
-                                result[j] = (high << 4) | low;
-                                break;
-                            }
-                            result[j] = 0x99;
-                            j--;
-                        }
-                    } else {
-                        a_high--;
-                    }
-                    borrow = 0;
-                }
-
-                if (a_high < b_high) {
-                    a_high += 10;
-                    borrow = 1;
-                }
-                int diff_high = a_high - b_high;
-
-                result[i] = (diff_high << 4) | diff_low;
-            }
-        } else {
-            // A < B, result will be negative
-            // Swap operands and set negative flag
-            unsigned char* temp = (unsigned char*)malloc(MAX_BCD_BYTES);
-            memcpy(temp, b, MAX_BCD_BYTES);
-
-            int borrow = 0;
-            for (int i = MAX_BCD_BYTES - 1; i >= 0; i--) {
-                int a_low = temp[i] & 0x0F;
-                int b_low = a[i] & 0x0F;
-                int a_high = (temp[i] >> 4) & 0x0F;
-                int b_high = (a[i] >> 4) & 0x0F;
-
-                // Process low digit
-                if (borrow) {
-                    if (a_low == 0) {
-                        a_low = 9;
-                        if (a_high > 0) {
-                            a_high--;
-                        } else {
-                            int j = i - 1;
-                            while (j >= 0) {
-                                int high = (temp[j] >> 4) & 0x0F;
-                                int low = temp[j] & 0x0F;
-                                if (low > 0) {
-                                    low--;
-                                    temp[j] = (high << 4) | low;
-                                    break;
-                                } else if (high > 0) {
-                                    high--;
-                                    low = 9;
-                                    temp[j] = (high << 4) | low;
-                                    break;
-                                }
-                                temp[j] = 0x99;
-                                j--;
-                            }
-                        }
-                    } else {
-                        a_low--;
-                    }
-                    borrow = 0;
-                }
-
-                if (a_low < b_low) {
-                    a_low += 10;
-                    borrow = 1;
-                }
-                int diff_low = a_low - b_low;
-
-                // Process high digit
-                if (borrow) {
-                    if (a_high == 0) {
-                        a_high = 9;
-                        int j = i - 1;
-                        while (j >= 0) {
-                            int high = (temp[j] >> 4) & 0x0F;
-                            int low = temp[j] & 0x0F;
-                            if (low > 0) {
-                                low--;
-                                temp[j] = (high << 4) | low;
-                                break;
-                            } else if (high > 0) {
-                                high--;
-                                low = 9;
-                                temp[j] = (high << 4) | low;
-                                break;
-                            }
-                            temp[j] = 0x99;
-                            j--;
-                        }
-                    } else {
-                        a_high--;
-                    }
-                    borrow = 0;
-                }
-
-                if (a_high < b_high) {
-                    a_high += 10;
-                    borrow = 1;
-                }
-                int diff_high = a_high - b_high;
-
-                result[i] = (diff_high << 4) | diff_low;
-            }
-            set_negative(result);
-            free(temp);
-        }
-    }
-    // Case 2: A - (-B) = A + B
-    else if (!a_neg && b_neg) {
-        unsigned char* pos_b = (unsigned char*)malloc(MAX_BCD_BYTES);
-        memcpy(pos_b, b, MAX_BCD_BYTES);
-        pos_b[0] &= 0x0F;  // Clear negative flag
-        result = bcd_add(a, pos_b);
-        free(pos_b);
-    }
-    // Case 3: -A - B = -(A + B)
-    else if (a_neg && !b_neg) {
-        unsigned char* pos_a = (unsigned char*)malloc(MAX_BCD_BYTES);
-        memcpy(pos_a, a, MAX_BCD_BYTES);
-        pos_a[0] &= 0x0F;  // Clear negative flag
-        result = bcd_add(pos_a, b);
-        set_negative(result);
-        free(pos_a);
-    }
-    // Case 4: -A - (-B) = -A + B = B - A
-    else {
-        unsigned char* pos_a = (unsigned char*)malloc(MAX_BCD_BYTES);
-        unsigned char* pos_b = (unsigned char*)malloc(MAX_BCD_BYTES);
-        memcpy(pos_a, a, MAX_BCD_BYTES);
-        memcpy(pos_b, b, MAX_BCD_BYTES);
-        pos_a[0] &= 0x0F;  // Clear negative flags
-        pos_b[0] &= 0x0F;
-        result = bcd_subtract(pos_b, pos_a);
-        free(pos_a);
-        free(pos_b);
-    }
-
-    return result;
-}
-
-// Multiply two BCD numbers
-unsigned char* bcd_multiply(unsigned char* a, unsigned char* b) {
-    if (!validate_for_multiply(a, b)) {
-        return NULL;
-    }
-
-    unsigned char* result = (unsigned char*)malloc(MAX_BCD_BYTES);
-    memset(result, 0, MAX_BCD_BYTES);
-
-    int a_neg = is_negative(a);
-    int b_neg = is_negative(b);
-
-    // Create positive copies of inputs
-    unsigned char* pos_a = (unsigned char*)malloc(MAX_BCD_BYTES);
-    unsigned char* pos_b = (unsigned char*)malloc(MAX_BCD_BYTES);
+  }
+  // Case 2: -A + B = B - A
+  else if (a_neg && !b_neg) {
+    unsigned char *pos_a = (unsigned char *)malloc(MAX_BCD_BYTES);
+    memcpy(pos_a, a, MAX_BCD_BYTES);
+    pos_a[0] &= 0x0F;
+    result = bcd_subtract(b, pos_a);
+    free(pos_a);
+  }
+  // Case 3: A + (-B) = A - B
+  else if (!a_neg && b_neg) {
+    unsigned char *b_complement = complement_to_10(b);
+    result = bcd_add(a, b_complement);
+    // unsigned char *pos_b = (unsigned char *)malloc(MAX_BCD_BYTES);
+    // memcpy(pos_b, b, MAX_BCD_BYTES);
+    // pos_b[0] &= 0x0F; // Clear negative flag
+    // result = bcd_subtract(a, pos_b);
+    // free(pos_b);
+  }
+  // Case 4: -A + (-B) = -(A + B)
+  else {
+    unsigned char *pos_a = (unsigned char *)malloc(MAX_BCD_BYTES);
+    unsigned char *pos_b = (unsigned char *)malloc(MAX_BCD_BYTES);
     memcpy(pos_a, a, MAX_BCD_BYTES);
     memcpy(pos_b, b, MAX_BCD_BYTES);
-
-    // Clear negative flags if present
-    if (a_neg) pos_a[0] &= 0x0F;
-    if (b_neg) pos_b[0] &= 0x0F;
-
-    // For each digit in b
-    for (int i = MAX_BCD_BYTES - 1; i >= 0; i--) {
-        // Process each digit in current byte of b
-        for (int digit = 0; digit < 2; digit++) {
-            unsigned char b_digit = (digit == 0) ? (pos_b[i] & 0x0F) : ((pos_b[i] >> 4) & 0x0F);
-            if (b_digit == 0) continue;
-
-            unsigned char* partial = (unsigned char*)malloc(MAX_BCD_BYTES);
-            memset(partial, 0, MAX_BCD_BYTES);
-
-            // Calculate position shift for this digit of b
-            int shift_amount = ((MAX_BCD_BYTES - 1 - i) * 2 + digit);
-
-            // Multiply each digit of a by current digit of b
-            int carry = 0;
-            for (int j = MAX_BCD_BYTES - 1; j >= 0; j--) {
-                for (int k = 0; k < 2; k++) {
-                    unsigned char a_digit = (k == 0) ? (pos_a[j] & 0x0F) : ((pos_a[j] >> 4) & 0x0F);
-
-                    // Calculate product and add carry
-                    int prod = (a_digit * b_digit) + carry;
-                    carry = prod / 10;
-                    prod %= 10;
-
-                    // Calculate position for this digit in result
-                    int pos_shift = ((MAX_BCD_BYTES - 1 - j) * 2 + k + shift_amount);
-                    int byte_pos = MAX_BCD_BYTES - 1 - (pos_shift / 2);
-                    int nibble_pos = pos_shift % 2;
-
-                    if (byte_pos >= 0) {
-                        if (nibble_pos == 0) {
-                            partial[byte_pos] |= prod;
-                        } else {
-                            partial[byte_pos] |= (prod << 4);
-                        }
-                    }
-                }
-            }
-
-            // Add partial product to result
-            unsigned char* new_result = bcd_add(result, partial);
-            free(result);
-            free(partial);
-            result = new_result;
-        }
-    }
-
-    // Set sign of result
-    if (a_neg ^ b_neg) {
-        set_negative(result);
-    }
-
+    pos_a[0] &= 0x0F;
+    pos_b[0] &= 0x0F;
+    result = bcd_add(pos_a, pos_b);
+    set_negative(result);
     free(pos_a);
     free(pos_b);
-    return result;
+  }
+
+  return result;
 }
-// Compare two BCD numbers
-int bcd_compare(unsigned char* a, unsigned char* b) {
-    int a_neg = is_negative(a);
-    int b_neg = is_negative(b);
 
-    // Different signs
-    if (a_neg && !b_neg) return -1;
-    if (!a_neg && b_neg) return 1;
+int count_digits(unsigned char *bcd) {
+  int digits = 0;
+  int started = 0;
+  int is_neg = is_negative(bcd);
 
-    // Same signs
-    int multiplier = a_neg ? -1 : 1;
+  for (int i = 0; i < MAX_BCD_BYTES; i++) {
+    unsigned char high = (bcd[i] >> 4) & 0x0F;
+    unsigned char low = bcd[i] & 0x0F;
 
-    for (int i = 0; i < MAX_BCD_BYTES; i++) {
-        unsigned char a_val = a[i] & (i == 0 ? 0x0F : 0xFF);
-        unsigned char b_val = b[i] & (i == 0 ? 0x0F : 0xFF);
-
-        if (a_val > b_val) return 1 * multiplier;
-        if (a_val < b_val) return -1 * multiplier;
+    // Skip negative flag for first byte
+    if (i == 0 && is_neg) {
+      if (low != 0) {
+        digits++;
+        started = 1;
+      }
+      continue;
     }
 
+    // Count high nibble if non-zero or we've started counting
+    if (high != 0 || started) {
+      digits++;
+      started = 1;
+    }
+
+    // Count low nibble if non-zero or we've started counting
+    if (low != 0 || started) {
+      digits++;
+      started = 1;
+    }
+  }
+
+  return digits == 0 ? 1 : digits;
+}
+
+int validate_for_add_subtract(unsigned char *a, unsigned char *b) {
+  int a_digits = count_digits(a);
+  int b_digits = count_digits(b);
+
+  if (a_digits > MAX_ADD_SUBTRACT_DIGITS ||
+      b_digits > MAX_ADD_SUBTRACT_DIGITS) {
+    printf(
+        "Error: Numbers must not exceed %d digits for addition/subtraction\n",
+        MAX_ADD_SUBTRACT_DIGITS);
     return 0;
+  }
+  return 1;
 }
 
-// Print BCD in binary format
-void print_bcd_bin(unsigned char* bcd) {
-    printf("Binary: ");
+int validate_for_multiply(unsigned char *a, unsigned char *b) {
+  int a_digits = count_digits(a);
+  int b_digits = count_digits(b);
 
-    // Handle negative numbers
-    int is_neg = is_negative(bcd);
-    if (is_neg) {
-        printf("1111 ");
+  if (a_digits > MAX_MULTIPLY_DIGITS || b_digits > MAX_MULTIPLY_DIGITS) {
+    printf("Error: Numbers must not exceed %d digits for multiplication\n",
+           MAX_MULTIPLY_DIGITS);
+    return 0;
+  }
+  return 1;
+}
+
+unsigned char *bcd_subtract(unsigned char *a, unsigned char *b) {
+  if (!validate_for_add_subtract(a, b)) {
+    return NULL;
+  }
+
+  unsigned char *result = (unsigned char *)malloc(MAX_BCD_BYTES);
+  memset(result, 0, MAX_BCD_BYTES);
+
+  int a_neg = is_negative(a);
+  int b_neg = is_negative(b);
+
+  // Case 1: A - B = A + (-B)
+  if (!a_neg && !b_neg) {
+    set_negative(b);
+    result = bcd_add(a, b);
+  }
+  // Case 2: A - (-B) = A + B
+  else if (!a_neg && b_neg) {
+    unsigned char *pos_b = (unsigned char *)malloc(MAX_BCD_BYTES);
+    memcpy(pos_b, b, MAX_BCD_BYTES);
+    pos_b[0] &= 0x0F; // Clear negative flag
+    result = bcd_add(a, pos_b);
+    free(pos_b);
+  }
+  // Case 3: -A - B = -(A + B)
+  else if (a_neg && !b_neg) {
+    unsigned char *pos_a = (unsigned char *)malloc(MAX_BCD_BYTES);
+    memcpy(pos_a, a, MAX_BCD_BYTES);
+    pos_a[0] &= 0x0F; // Clear negative flag
+    result = bcd_add(pos_a, b);
+    set_negative(result);
+    free(pos_a);
+  }
+  // Case 4: -A - (-B) = -A + B
+  else {
+    unsigned char *pos_b = (unsigned char *)malloc(MAX_BCD_BYTES);
+    memcpy(pos_b, b, MAX_BCD_BYTES);
+    pos_b[0] &= 0x0F;
+    result = bcd_add(a, pos_b);
+    free(pos_b);
+  }
+
+  return result;
+}
+
+unsigned char *bcd_multiply(unsigned char *a, unsigned char *b) {
+  if (!validate_for_multiply(a, b)) {
+    return NULL;
+  }
+
+  unsigned char *result = (unsigned char *)malloc(MAX_BCD_BYTES);
+  memset(result, 0, MAX_BCD_BYTES);
+
+  int a_neg = is_negative(a);
+  int b_neg = is_negative(b);
+
+  // Create positive copies of inputs
+  unsigned char *pos_a = (unsigned char *)malloc(MAX_BCD_BYTES);
+  unsigned char *pos_b = (unsigned char *)malloc(MAX_BCD_BYTES);
+  memcpy(pos_a, a, MAX_BCD_BYTES);
+  memcpy(pos_b, b, MAX_BCD_BYTES);
+
+  // Clear negative flags if present
+  if (a_neg)
+    pos_a[0] &= 0x0F;
+  if (b_neg)
+    pos_b[0] &= 0x0F;
+
+  // For each digit in b
+  for (int i = MAX_BCD_BYTES - 1; i >= 0; i--) {
+    // Process each digit in current byte of b
+    for (int digit = 0; digit < 2; digit++) {
+      unsigned char b_digit =
+          (digit == 0) ? (pos_b[i] & 0x0F) : ((pos_b[i] >> 4) & 0x0F);
+      if (b_digit == 0)
+        continue;
+
+      unsigned char *partial = (unsigned char *)malloc(MAX_BCD_BYTES);
+      memset(partial, 0, MAX_BCD_BYTES);
+
+      // Calculate position shift for this digit of b
+      int shift_amount = ((MAX_BCD_BYTES - 1 - i) * 2 + digit);
+
+      // Multiply each digit of a by current digit of b
+      int carry = 0;
+      for (int j = MAX_BCD_BYTES - 1; j >= 0; j--) {
+        for (int k = 0; k < 2; k++) {
+          unsigned char a_digit =
+              (k == 0) ? (pos_a[j] & 0x0F) : ((pos_a[j] >> 4) & 0x0F);
+
+          // Calculate product and add carry
+          int prod = (a_digit * b_digit) + carry;
+          carry = prod / 10;
+          prod %= 10;
+
+          // Calculate position for this digit in result
+          int pos_shift = ((MAX_BCD_BYTES - 1 - j) * 2 + k + shift_amount);
+          int byte_pos = MAX_BCD_BYTES - 1 - (pos_shift / 2);
+          int nibble_pos = pos_shift % 2;
+
+          if (byte_pos >= 0) {
+            if (nibble_pos == 0) {
+              partial[byte_pos] |= prod;
+            } else {
+              partial[byte_pos] |= (prod << 4);
+            }
+          }
+        }
+      }
+
+      // Add partial product to result
+      unsigned char *new_result = bcd_add(result, partial);
+      free(result);
+      free(partial);
+      result = new_result;
+    }
+  }
+
+  // Set sign of result
+  if (a_neg ^ b_neg) {
+    set_negative(result);
+  }
+
+  free(pos_a);
+  free(pos_b);
+  return result;
+}
+
+int bcd_compare(unsigned char *a, unsigned char *b) {
+  int a_neg = is_negative(a);
+  int b_neg = is_negative(b);
+
+  // Different signs
+  if (a_neg && !b_neg)
+    return -1;
+  if (!a_neg && b_neg)
+    return 1;
+
+  // Same signs
+  int multiplier = a_neg ? -1 : 1;
+
+  for (int i = 0; i < MAX_BCD_BYTES; i++) {
+    unsigned char a_val = a[i] & (i == 0 ? 0x0F : 0xFF);
+    unsigned char b_val = b[i] & (i == 0 ? 0x0F : 0xFF);
+
+    if (a_val > b_val)
+      return 1 * multiplier;
+    if (a_val < b_val)
+      return -1 * multiplier;
+  }
+
+  return 0;
+}
+
+void print_bcd_bin(unsigned char *bcd) {
+  printf("Binary: ");
+
+  // Handle negative numbers
+  int is_neg = is_negative(bcd);
+  if (is_neg) {
+    printf("1111 ");
+  }
+
+  // Find first significant digit (skipping the negative flag if present)
+  int start_idx = 0;
+  int found = 0;
+
+  // First, find the first non-zero byte
+  for (int i = 0; i < MAX_BCD_BYTES; i++) {
+    unsigned char byte = bcd[i];
+    if (i == 0 && is_neg) {
+      byte &= 0x0F; // Clear the negative flag for checking
     }
 
-    // Find first significant digit (skipping the negative flag if present)
-    int start_idx = 0;
-    int found = 0;
+    // Check both nibbles
+    unsigned char high = (byte >> 4) & 0x0F;
+    unsigned char low = byte & 0x0F;
 
-    // First, find the first non-zero byte
-    for (int i = 0; i < MAX_BCD_BYTES; i++) {
-        unsigned char byte = bcd[i];
-        if (i == 0 && is_neg) {
-            byte &= 0x0F;  // Clear the negative flag for checking
-        }
-
-        // Check both nibbles
-        unsigned char high = (byte >> 4) & 0x0F;
-        unsigned char low = byte & 0x0F;
-
-        if (high != 0 || low != 0) {
-            start_idx = i;
-            found = 1;
-            break;
-        }
+    if (high != 0 || low != 0) {
+      start_idx = i;
+      found = 1;
+      break;
     }
+  }
 
-    // If number is zero
-    if (!found) {
-        printf("0000");
-        printf("\n");
-        return;
-    }
-
-    // Print significant digits
-    int first_nibble = 1;
-    for (int i = start_idx; i < MAX_BCD_BYTES; i++) {
-        unsigned char high = (bcd[i] >> 4) & 0x0F;
-        unsigned char low = bcd[i] & 0x0F;
-
-        // Handle first byte for negative numbers
-        if (i == 0 && is_neg) {
-            if (low != 0 || !first_nibble) {
-                for (int j = 3; j >= 0; j--) {
-                    printf("%d", (bcd[i] >> j) & 1);
-                }
-                first_nibble = 0;
-            }
-            continue;
-        }
-
-        // For regular bytes
-        if (first_nibble) {
-            // For the first non-zero nibble, we need to handle leading zeros
-            if (high != 0) {
-                // Print high nibble with its proper zeros
-                for (int j = 7; j >= 4; j--) {
-                    printf("%d", (bcd[i] >> j) & 1);
-                }
-                printf(" ");
-                first_nibble = 0;
-            }
-        } else {
-            // After first nibble, print all nibbles with proper spacing
-            for (int j = 7; j >= 4; j--) {
-                printf("%d", (bcd[i] >> j) & 1);
-            }
-            printf(" ");
-        }
-
-        // Always print low nibble if we've printed high nibble or if it's non-zero
-        if (!first_nibble || low != 0) {
-            for (int j = 3; j >= 0; j--) {
-                printf("%d", (bcd[i] >> j) & 1);
-            }
-            if (i < MAX_BCD_BYTES - 1) printf(" ");
-            first_nibble = 0;
-        }
-    }
+  // If number is zero
+  if (!found) {
+    printf("0000");
     printf("\n");
+    return;
+  }
+
+  // Print significant digits
+  int first_nibble = 1;
+  for (int i = start_idx; i < MAX_BCD_BYTES; i++) {
+    unsigned char high = (bcd[i] >> 4) & 0x0F;
+    unsigned char low = bcd[i] & 0x0F;
+
+    // Handle first byte for negative numbers
+    if (i == 0 && is_neg) {
+      if (low != 0 || !first_nibble) {
+        for (int j = 3; j >= 0; j--) {
+          printf("%d", (bcd[i] >> j) & 1);
+        }
+        first_nibble = 0;
+      }
+      continue;
+    }
+
+    // For regular bytes
+    if (first_nibble) {
+      // For the first non-zero nibble, we need to handle leading zeros
+      if (high != 0) {
+        // Print high nibble with its proper zeros
+        for (int j = 7; j >= 4; j--) {
+          printf("%d", (bcd[i] >> j) & 1);
+        }
+        printf(" ");
+        first_nibble = 0;
+      }
+    } else {
+      // After first nibble, print all nibbles with proper spacing
+      for (int j = 7; j >= 4; j--) {
+        printf("%d", (bcd[i] >> j) & 1);
+      }
+      printf(" ");
+    }
+
+    // Always print low nibble if we've printed high nibble or if it's non-zero
+    if (!first_nibble || low != 0) {
+      for (int j = 3; j >= 0; j--) {
+        printf("%d", (bcd[i] >> j) & 1);
+      }
+      if (i < MAX_BCD_BYTES - 1)
+        printf(" ");
+      first_nibble = 0;
+    }
+  }
+  printf("\n");
 }
 
-// Print BCD in hexadecimal format
-void print_bcd_hex(unsigned char* bcd) {
-    printf("Hex: ");
+void print_bcd_hex(unsigned char *bcd) {
+  printf("Hex: ");
 
-    // Handle negative numbers
-    int is_neg = is_negative(bcd);
-    if (is_neg) {
-        printf("-");
+  // Handle negative numbers
+  int is_neg = is_negative(bcd);
+  if (is_neg) {
+    printf("-");
+  }
+
+  // Find first significant digit (skipping the negative flag if present)
+  int start_idx = 0;
+  int found = 0;
+
+  // First, find the first non-zero byte
+  for (int i = 0; i < MAX_BCD_BYTES; i++) {
+    unsigned char byte = bcd[i];
+    if (i == 0 && is_neg) {
+      byte &= 0x0F; // Clear the negative flag for checking
     }
 
-    // Find first significant digit (skipping the negative flag if present)
-    int start_idx = 0;
-    int found = 0;
+    // Check both nibbles
+    unsigned char high = (byte >> 4) & 0x0F;
+    unsigned char low = byte & 0x0F;
 
-    // First, find the first non-zero byte
-    for (int i = 0; i < MAX_BCD_BYTES; i++) {
-        unsigned char byte = bcd[i];
-        if (i == 0 && is_neg) {
-            byte &= 0x0F;  // Clear the negative flag for checking
-        }
-
-        // Check both nibbles
-        unsigned char high = (byte >> 4) & 0x0F;
-        unsigned char low = byte & 0x0F;
-
-        if (high != 0 || low != 0) {
-            start_idx = i;
-            found = 1;
-            break;
-        }
+    if (high != 0 || low != 0) {
+      start_idx = i;
+      found = 1;
+      break;
     }
+  }
 
-    // If number is zero
-    if (!found) {
-        printf("00");
-        printf("\n");
-        return;
-    }
-
-    // Print significant digits
-    int first_byte = 1;
-    for (int i = start_idx; i < MAX_BCD_BYTES; i++) {
-        if (i == 0 && is_neg) {
-            // Only print low nibble for first byte if negative
-            unsigned char low = bcd[i] & 0x0F;
-            if (low != 0 || first_byte) {
-                printf("%01X", low);
-                first_byte = 0;
-            }
-        } else {
-            // For non-first bytes or positive numbers
-            unsigned char byte = bcd[i];
-            if (byte != 0 || !first_byte) {
-                if (!first_byte) printf(" ");
-                printf("%02X", byte);
-                first_byte = 0;
-            }
-        }
-    }
+  // If number is zero
+  if (!found) {
+    printf("00");
     printf("\n");
+    return;
+  }
+
+  // Print significant digits
+  int first_byte = 1;
+  for (int i = start_idx; i < MAX_BCD_BYTES; i++) {
+    if (i == 0 && is_neg) {
+      // Only print low nibble for first byte if negative
+      unsigned char low = bcd[i] & 0x0F;
+      if (low != 0 || first_byte) {
+        printf("%01X", low);
+        first_byte = 0;
+      }
+    } else {
+      // For non-first bytes or positive numbers
+      unsigned char byte = bcd[i];
+      if (byte != 0 || !first_byte) {
+        if (!first_byte)
+          printf(" ");
+        printf("%02X", byte);
+        first_byte = 0;
+      }
+    }
+  }
+  printf("\n");
 }
 
-// Menu function
 void Menu() {
-    printf("\nMenu:\n");
-    printf("1. Enter the first number\n");
-    printf("2. Enter the second number\n");
-    printf("3. Add\n");
-    printf("4. Subtract\n");
-    printf("5. Multiply\n");
-    printf("6. Compare\n");
-    printf("7. End\n");
-    printf("Choice: ");
+  printf("\nMenu:\n");
+  printf("1. Enter the first number\n");
+  printf("2. Enter the second number\n");
+  printf("3. Add\n");
+  printf("4. Subtract\n");
+  printf("5. Multiply\n");
+  printf("6. Compare\n");
+  printf("7. End\n");
+  printf("Choice: ");
 }
 
 int main() {
-    int choice = 0;
-    int num1 = 0, num2 = 0;
-    unsigned char* operand1 = (unsigned char*)malloc(MAX_BCD_BYTES);
-    unsigned char* operand2 = (unsigned char*)malloc(MAX_BCD_BYTES);
-    unsigned char* result;
-    memset(operand1, 0, MAX_BCD_BYTES);
-    memset(operand2, 0, MAX_BCD_BYTES);
+  int choice = 0;
+  int num1 = 0, num2 = 0;
+  unsigned char *operand1 = (unsigned char *)malloc(MAX_BCD_BYTES);
+  unsigned char *operand2 = (unsigned char *)malloc(MAX_BCD_BYTES);
+  unsigned char *result;
+  memset(operand1, 0, MAX_BCD_BYTES);
+  memset(operand2, 0, MAX_BCD_BYTES);
 
-    while (1) {
-        Menu();
-        scanf("%d", &choice);
+  while (1) {
+    Menu();
+    scanf("%d", &choice);
 
-        switch (choice) {
-            case 1:
-                printf("Enter the first number: ");
-                scanf("%d", &num1);
-                int_to_bcd(num1, operand1);
-                print_bcd_bin(operand1);
-                print_bcd_hex(operand1);
-                break;
+    switch (choice) {
+    case 1:
+      printf("Enter the first number: ");
+      scanf("%d", &num1);
+      int_to_bcd(num1, operand1);
+      print_bcd_bin(operand1);
+      print_bcd_hex(operand1);
+      break;
 
-            case 2:
-                printf("Enter the second number: ");
-                scanf("%d", &num2);
-                int_to_bcd(num2, operand2);
-                print_bcd_bin(operand2);
-                print_bcd_hex(operand2);
-                break;
+    case 2:
+      printf("Enter the second number: ");
+      scanf("%d", &num2);
+      int_to_bcd(num2, operand2);
+      print_bcd_bin(operand2);
+      print_bcd_hex(operand2);
+      break;
 
-            case 3:
-                printf("Adding...\n");
-                result = bcd_add(operand1, operand2);
-                if (result) {
-                    print_bcd_bin(result);
-                    print_bcd_hex(result);
-                    printf("Check: %d + %d = %d\n", num1, num2, num1 + num2);
-                    free(result);
-                }
-                break;
+    case 3:
+      printf("Adding...\n");
+      result = bcd_add(operand1, operand2);
+      if (result) {
+        print_bcd_bin(result);
+        print_bcd_hex(result);
+        printf("Check: %d + %d = %d\n", num1, num2, num1 + num2);
+        free(result);
+      }
+      break;
 
-            case 4:
-                printf("Subtracting...\n");
-                result = bcd_subtract(operand1, operand2);
-                if (result) {
-                    print_bcd_bin(result);
-                    print_bcd_hex(result);
-                    printf("Check: %d - %d = %d\n", num1, num2, num1 - num2);
-                    free(result);
-                }
-                break;
+    case 4:
+      printf("Subtracting...\n");
+      result = bcd_subtract(operand1, operand2);
+      if (result) {
+        print_bcd_bin(result);
+        print_bcd_hex(result);
+        printf("Check: %d - %d = %d\n", num1, num2, num1 - num2);
+        free(result);
+      }
+      break;
 
-            case 5:
-                printf("Multiplying...\n");
-                result = bcd_multiply(operand1, operand2);
-                if (result) {
-                    print_bcd_bin(result);
-                    print_bcd_hex(result);
-                    printf("Check: %d * %d = %d\n", num1, num2, num1 * num2);
-                    free(result);
-                }
-                break;
+    case 5:
+      printf("Multiplying...\n");
+      result = bcd_multiply(operand1, operand2);
+      if (result) {
+        print_bcd_bin(result);
+        print_bcd_hex(result);
+        printf("Check: %d * %d = %d\n", num1, num2, num1 * num2);
+        free(result);
+      }
+      break;
 
-            case 6:
-                printf("Comparing...\n");
-                int cmp = bcd_compare(operand1, operand2);
-                if (cmp > 0) printf("First number is larger\n");
-                else if (cmp < 0) printf("Second number is larger\n");
-                else printf("Numbers are equal\n");
-                printf("Check: %d %c %d\n", num1,
-                       cmp > 0 ? '>' : (cmp < 0 ? '<' : '='), num2);
-                break;
+    case 6:
+      printf("Comparing...\n");
+      int cmp = bcd_compare(operand1, operand2);
+      if (cmp > 0)
+        printf("First number is larger\n");
+      else if (cmp < 0)
+        printf("Second number is larger\n");
+      else
+        printf("Numbers are equal\n");
+      printf("Check: %d %c %d\n", num1, cmp > 0 ? '>' : (cmp < 0 ? '<' : '='),
+             num2);
+      break;
 
-            case 7:
-                printf("Ending program...\n");
-                free(operand1);
-                free(operand2);
-                return 0;
+    case 7:
+      printf("Ending program...\n");
+      free(operand1);
+      free(operand2);
+      return 0;
 
-            default:
-                printf("Invalid choice!\n");
-        }
+    default:
+      printf("Invalid choice!\n");
     }
+  }
 
-    return 0;
+  return 0;
 }
